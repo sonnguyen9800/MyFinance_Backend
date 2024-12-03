@@ -2,6 +2,8 @@ package expense
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"net/http"
 	"time"
 
@@ -9,6 +11,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type Handler struct {
@@ -56,14 +59,52 @@ func (h *Handler) HandleCreateExpense(c *gin.Context) {
 	c.JSON(http.StatusCreated, expense)
 }
 
-// Get all expenses for user
+// Get all expenses for user with pagination
 func (h *Handler) HandleGetExpenses(c *gin.Context) {
 	userID := c.GetString("user_id")
+
+	// Parse pagination parameters
+	offset := 0
+	if offsetStr := c.Query("offset"); offsetStr != "" {
+		if _, err := fmt.Sscanf(offsetStr, "%d", &offset); err != nil || offset < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid offset parameter"})
+			return
+		}
+	}
+
+	limit := 10 // default limit
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if _, err := fmt.Sscanf(limitStr, "%d", &limit); err != nil || limit <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid limit parameter"})
+			return
+		}
+	}
+
 	collection := h.mongoClient.Database("MyFinance_Dev").Collection("expenses")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	cursor, err := collection.Find(ctx, bson.M{"user_id": userID})
+	// Create filter for user's expenses
+	filter := bson.M{"user_id": userID}
+
+	// Get total count of expenses
+	totalCount, err := collection.CountDocuments(ctx, filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not count expenses"})
+		return
+	}
+
+	// Calculate total pages
+	totalPages := int(math.Ceil(float64(totalCount) / float64(limit)))
+	currentPage := (offset / limit) + 1
+
+	// Find expenses with pagination
+	findOptions := options.Find().
+		SetSkip(int64(offset)).
+		SetLimit(int64(limit)).
+		SetSort(bson.D{{Key: "date", Value: -1}}) // Sort by date descending
+
+	cursor, err := collection.Find(ctx, filter, findOptions)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch expenses"})
 		return
@@ -76,7 +117,14 @@ func (h *Handler) HandleGetExpenses(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, expenses)
+	response := PaginatedExpenseResponse{
+		Expenses:    expenses,
+		TotalCount:  totalCount,
+		CurrentPage: currentPage,
+		TotalPages:  totalPages,
+		Limit:       limit,
+	}
+	c.JSON(http.StatusOK, response)
 }
 
 // Get single expense
