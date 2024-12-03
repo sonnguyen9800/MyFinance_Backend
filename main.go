@@ -85,6 +85,8 @@ func main() {
 
 	// Public routes
 	r.POST("/api/login", authHandler.HandleLogin)
+	r.POST("/api/signin", authHandler.HandleLogin)
+
 	r.POST("/api/signup", authHandler.HandleSignup)
 
 	// Protected routes

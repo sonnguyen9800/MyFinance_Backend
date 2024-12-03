@@ -31,6 +31,7 @@ func (h *Handler) HandleCreateExpense(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
+	req.Date = time.Now().Format("2006-01-02")
 
 	expense := Expense{
 		ID:           primitive.NewObjectID().Hex(),
@@ -39,9 +40,10 @@ func (h *Handler) HandleCreateExpense(c *gin.Context) {
 		CurrencyCode: req.CurrencyCode,
 		Name:         req.Name,
 		Description:  req.Description,
+		Date:         req.Date,
 	}
 
-	collection := h.mongoClient.Database("MyFinance_Dev").Collection("payments")
+	collection := h.mongoClient.Database("MyFinance_Dev").Collection("expenses")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 

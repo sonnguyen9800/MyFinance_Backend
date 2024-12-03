@@ -7,6 +7,7 @@ type Expense struct {
 	CurrencyCode string  `bson:"currency_code" json:"currency_code"`
 	Name         string  `bson:"name" json:"name"`
 	Description  string  `bson:"description" json:"description"`
+	Date         string  `bson:"date" json:"date"`
 }
 
 type CreateExpenseRequest struct {
@@ -14,6 +15,7 @@ type CreateExpenseRequest struct {
 	CurrencyCode string  `json:"currency_code" binding:"required"`
 	Name         string  `json:"name" binding:"required"`
 	Description  string  `json:"description"`
+	Date         string  `json:"date"`
 }
 
 type UpdateExpenseRequest struct {
