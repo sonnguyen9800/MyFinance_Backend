@@ -24,3 +24,12 @@ type UpdateExpenseRequest struct {
 	Name         string  `json:"name"`
 	Description  string  `json:"description"`
 }
+
+// PaginatedExpenseResponse represents the paginated response for expenses
+type PaginatedExpenseResponse struct {
+	Expenses    []Expense `json:"expenses"`
+	TotalCount  int64     `json:"total_count"`
+	CurrentPage int       `json:"current_page"`
+	TotalPages  int       `json:"total_pages"`
+	Limit       int       `json:"limit"`
+}
