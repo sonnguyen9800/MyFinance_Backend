@@ -3,6 +3,7 @@ package authentication
 import (
 	"context"
 	"fmt"
+	"my-finance-backend/config"
 	"my-finance-backend/users"
 	"net/http"
 	"strings"
@@ -19,12 +20,14 @@ import (
 type Handler struct {
 	mongoClient *mongo.Client
 	jwtSecret   []byte
+	config      *config.Config
 }
 
-func NewHandler(mongoClient *mongo.Client, jwtSecret []byte) *Handler {
+func NewHandler(mongoClient *mongo.Client, config *config.Config, jwtSecret []byte) *Handler {
 	return &Handler{
 		mongoClient: mongoClient,
 		jwtSecret:   jwtSecret,
+		config:      config,
 	}
 }
 
@@ -37,7 +40,7 @@ func (h *Handler) HandleLogin(c *gin.Context) {
 	}
 
 	// Get users collection
-	collection := h.mongoClient.Database("MyFinance_Dev").Collection("users")
+	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionUserName)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -102,7 +105,7 @@ func (h *Handler) HandleSignup(c *gin.Context) {
 	}
 
 	// Get users collection
-	collection := h.mongoClient.Database("MyFinance_Dev").Collection("users")
+	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionUserName)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 

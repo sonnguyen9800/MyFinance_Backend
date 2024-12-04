@@ -20,10 +20,6 @@ import (
 	"errors"
 )
 
-var (
-	jwtSecret = []byte("your-secret-key") // In production, use environment variable
-)
-
 // Authentication middleware
 func authMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -39,7 +35,8 @@ func authMiddleware() gin.HandlerFunc {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, errors.New("invalid signing method")
 			}
-			return jwtSecret, nil
+			config := LoadConfig()
+			return []byte(config.JWTSecret), nil
 		})
 
 		if err != nil {
@@ -62,11 +59,14 @@ func authMiddleware() gin.HandlerFunc {
 }
 
 func main() {
+	// Load configuration
+	config := LoadConfig()
+
 	// Initialize MongoDB connection
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
+	clientOptions := options.Client().ApplyURI(config.DatabaseURL)
 	client, err := mongo.Connect(ctx, clientOptions)
 	if err != nil {
 		log.Fatal(err)
@@ -78,14 +78,14 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.Println("Connected to MongoDB!")
+	log.Printf("Connected to MongoDB! Environment: %s, Database: %s\n", config.AppEnv, config.DatabaseName)
 
 	// Initialize handlers
-	authHandler := authentication.NewHandler(client, jwtSecret)
-	categoryHandler := category.NewHandler(client)
-	tagHandler := tag.NewHandler(client)
-	expenseHandler := expense.NewHandler(client, jwtSecret)
+	authHandler := authentication.NewHandler(client, config, []byte(config.JWTSecret))
+	expenseHandler := expense.NewHandler(client, config, []byte(config.JWTSecret))
 
+	categoryHandler := category.NewHandler(client, config)
+	tagHandler := tag.NewHandler(client, config)
 	// Initialize Gin router
 	r := gin.Default()
 
@@ -95,12 +95,12 @@ func main() {
 	r.POST("/api/signup", authHandler.HandleSignup)
 
 	// Login by token
-	userAuthen := users.NewHandler(client, jwtSecret)
+	userAuthen := users.NewHandler(client, []byte(config.JWTSecret))
 	r.POST("/api/user", userAuthen.HandleLoginByToken)
 
 	// Protected routes
 	auth := r.Group("/api")
-	auth.Use(authHandler.AuthMiddleware())
+	auth.Use(authMiddleware())
 	{
 		// Category routes
 		auth.POST("/categories", categoryHandler.HandleCreateCategory)
@@ -109,6 +109,7 @@ func main() {
 		auth.PUT("/categories/:id", categoryHandler.HandleUpdateCategory)
 		auth.DELETE("/categories/:id", categoryHandler.HandleDeleteCategory)
 
+		// Tag routes
 		r.POST("/api/tags", tagHandler.HandleCreateTag)
 		r.GET("/api/tags", tagHandler.HandleGetTags)
 		r.GET("/api/tags/:id", tagHandler.HandleGetTag)

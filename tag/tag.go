@@ -2,6 +2,7 @@ package tag
 
 import (
 	"context"
+	"my-finance-backend/config"
 	"net/http"
 	"time"
 
@@ -13,11 +14,13 @@ import (
 
 type Handler struct {
 	mongoClient *mongo.Client
+	config      *config.Config
 }
 
-func NewHandler(mongoClient *mongo.Client) *Handler {
+func NewHandler(mongoClient *mongo.Client, config *config.Config) *Handler {
 	return &Handler{
 		mongoClient: mongoClient,
+		config:      config,
 	}
 }
 
@@ -29,7 +32,7 @@ func (h *Handler) HandleCreateTag(c *gin.Context) {
 		return
 	}
 
-	collection := h.mongoClient.Database("MyFinance_Dev").Collection("tags")
+	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionTagsName)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -58,7 +61,7 @@ func (h *Handler) HandleCreateTag(c *gin.Context) {
 
 // Get all tags
 func (h *Handler) HandleGetTags(c *gin.Context) {
-	collection := h.mongoClient.Database("MyFinance_Dev").Collection("tags")
+	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionTagsName)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -82,7 +85,7 @@ func (h *Handler) HandleGetTags(c *gin.Context) {
 func (h *Handler) HandleGetTag(c *gin.Context) {
 	tagID := c.Param("id")
 
-	collection := h.mongoClient.Database("MyFinance_Dev").Collection("tags")
+	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionTagsName)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
