@@ -111,7 +111,7 @@ func (h *Handler) HandleGetExpenses(c *gin.Context) {
 	}
 	defer cursor.Close(ctx)
 
-	var expenses []Expense
+	var expenses []Expense = make([]Expense, 0)
 	if err = cursor.All(ctx, &expenses); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not decode expenses"})
 		return
