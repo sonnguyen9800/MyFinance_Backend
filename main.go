@@ -4,7 +4,9 @@ import (
 	"context"
 	"log"
 	"my-finance-backend/authentication"
+	"my-finance-backend/category"
 	"my-finance-backend/expense"
+	"my-finance-backend/tag"
 	"my-finance-backend/users"
 	"net/http"
 	"strings"
@@ -80,6 +82,9 @@ func main() {
 
 	// Initialize handlers
 	authHandler := authentication.NewHandler(client, jwtSecret)
+	categoryHandler := category.NewHandler(client)
+	tagHandler := tag.NewHandler(client)
+	expenseHandler := expense.NewHandler(client, jwtSecret)
 
 	// Initialize Gin router
 	r := gin.Default()
@@ -87,7 +92,6 @@ func main() {
 	// Public routes
 	r.POST("/api/login", authHandler.HandleLogin)
 	r.POST("/api/signin", authHandler.HandleLogin)
-
 	r.POST("/api/signup", authHandler.HandleSignup)
 
 	// Login by token
@@ -98,11 +102,18 @@ func main() {
 	auth := r.Group("/api")
 	auth.Use(authHandler.AuthMiddleware())
 	{
+		// Category routes
+		auth.POST("/categories", categoryHandler.HandleCreateCategory)
+		auth.GET("/categories", categoryHandler.HandleGetCategories)
+		auth.GET("/categories/:id", categoryHandler.HandleGetCategory)
+		auth.PUT("/categories/:id", categoryHandler.HandleUpdateCategory)
+		auth.DELETE("/categories/:id", categoryHandler.HandleDeleteCategory)
 
-		expenseHandler := expense.NewHandler(client, jwtSecret)
+		r.POST("/api/tags", tagHandler.HandleCreateTag)
+		r.GET("/api/tags", tagHandler.HandleGetTags)
+		r.GET("/api/tags/:id", tagHandler.HandleGetTag)
 
 		// Expense routes
-
 		auth.POST("/expenses", expenseHandler.HandleCreateExpense)
 		auth.GET("/expenses", expenseHandler.HandleGetExpenses)
 		auth.GET("/expenses/:id", expenseHandler.HandleGetExpense)
