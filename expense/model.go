@@ -33,3 +33,8 @@ type PaginatedExpenseResponse struct {
 	TotalPages  int       `json:"total_pages"`
 	Limit       int       `json:"limit"`
 }
+
+type GetLastExpensesResponse struct {
+	TotalExpensesLast30Days float64 `json:"total_expenses_last_30_days"`
+	TotalExpensesLast7Days  float64 `json:"total_expenses_last_7_days"`
+}

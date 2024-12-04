@@ -3,6 +3,7 @@ package expense
 import (
 	"context"
 	"fmt"
+	"log"
 	"math"
 	"my-finance-backend/config"
 	"net/http"
@@ -27,6 +28,67 @@ func NewHandler(mongoClient *mongo.Client, config *config.Config, jwtSecret []by
 		jwtSecret:   jwtSecret,
 		config:      config,
 	}
+}
+
+func (h *Handler) HandleGetLastExpenses(c *gin.Context) {
+	userID := c.GetString("user_id")
+	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionExpensesName)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	filter := bson.M{"user_id": userID}
+	// Get total count of expenses
+	_, err := collection.CountDocuments(ctx, filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not count expenses"})
+		return
+	}
+
+	calculateSum := func(limit int) float64 {
+		pipeline := mongo.Pipeline{
+			// Step 1: Sort by date in descending order
+			{{"$sort", bson.D{{"date", -1}}}},
+			// Step 2: Limit to the specified number of documents
+			{{"$limit", int32(limit)}},
+			// Step 3: Group to calculate the sum of the "value" field
+			{{"$group", bson.D{
+				{"_id", nil}, // No grouping by specific fields; we're just calculating the total
+				{"totalValue", bson.D{{"$sum", "$amount"}}},
+			}}},
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		cursor, err := collection.Aggregate(ctx, pipeline)
+		if err != nil {
+			log.Fatalf("Error executing aggregation for limit %d: %v", limit, err)
+		}
+		defer cursor.Close(ctx)
+
+		// Retrieve the result
+		var result []bson.M
+		if err = cursor.All(ctx, &result); err != nil {
+			log.Fatalf("Error decoding aggregation result for limit %d: %v", limit, err)
+		}
+
+		// Return the sum or 0 if no records are found
+		if len(result) > 0 {
+			if totalValue, ok := result[0]["totalValue"].(float64); ok {
+				return totalValue
+			}
+		}
+		return 0
+	}
+
+	var sumLast7 = calculateSum(7)
+	var sumLast30 = calculateSum(30)
+
+	GetTotalExpensesResponse := GetLastExpensesResponse{
+		TotalExpensesLast30Days: sumLast30,
+		TotalExpensesLast7Days:  sumLast7,
+	}
+
+	c.JSON(http.StatusOK, GetTotalExpensesResponse)
 }
 
 // Create expense
@@ -83,7 +145,7 @@ func (h *Handler) HandleGetExpenses(c *gin.Context) {
 		}
 	}
 
-	collection := h.mongoClient.Database("MyFinance_Dev").Collection("expenses")
+	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionExpensesName)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 

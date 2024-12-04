@@ -117,9 +117,12 @@ func main() {
 		// Expense routes
 		auth.POST("/expenses", expenseHandler.HandleCreateExpense)
 		auth.GET("/expenses", expenseHandler.HandleGetExpenses)
+		auth.GET("/expenses_last", expenseHandler.HandleGetLastExpenses)
+
 		auth.GET("/expenses/:id", expenseHandler.HandleGetExpense)
 		auth.PUT("/expenses/:id", expenseHandler.HandleUpdateExpense)
 		auth.DELETE("/expenses/:id", expenseHandler.HandleDeleteExpense)
+
 	}
 
 	// Start server
