@@ -8,7 +8,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -46,7 +45,6 @@ func (h *Handler) initializeDefaultCategory() {
 	if err == mongo.ErrNoDocuments {
 		// Create default category
 		defaultCategory := Category{
-			ID:       primitive.NewObjectID().Hex(),
 			Name:     DefaultCategoryName,
 			Color:    DefaultCategoryColor,
 			IconName: DefaultCategoryIconName,
@@ -88,7 +86,6 @@ func (h *Handler) HandleCreateCategory(c *gin.Context) {
 	}
 
 	category := Category{
-		ID:       primitive.NewObjectID().Hex(),
 		Name:     req.Name,
 		Color:    req.Color,
 		IconName: req.IconName,
