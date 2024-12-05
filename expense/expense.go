@@ -44,17 +44,25 @@ func (h *Handler) HandleGetLastExpenses(c *gin.Context) {
 	}
 
 	calculateSum := func(limit int) float64 {
+
 		pipeline := mongo.Pipeline{
-			// Step 1: Sort by date in descending order
-			{{"$sort", bson.D{{"date", -1}}}},
-			// Step 2: Limit to the specified number of documents
-			{{"$limit", int32(limit)}},
-			// Step 3: Group to calculate the sum of the "value" field
+			// Step 1: Group by unique dates
+			// Step 1: Group by date and calculate total amount per date
 			{{"$group", bson.D{
-				{"_id", nil}, // No grouping by specific fields; we're just calculating the total
-				{"totalValue", bson.D{{"$sum", "$amount"}}},
+				{"_id", "$date"}, // Group by the "date" field
+				{"dailyTotal", bson.D{{"$sum", "$amount"}}}, // Sum the "amount" field for each date
+			}}},
+			// Step 2: Sort the grouped dates in descending order
+			{{"$sort", bson.D{{"_id", -1}}}},
+			// Step 3: Limit to the latest 30 unique dates
+			{{"$limit", limit}},
+			// Step 4: Calculate the sum of all daily totals
+			{{"$group", bson.D{
+				{"_id", nil}, // No grouping key, combine all results
+				{"totalValue", bson.D{{"$sum", "$dailyTotal"}}}, // Sum the daily totals
 			}}},
 		}
+		//
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
