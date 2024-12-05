@@ -115,7 +115,7 @@ func (h *Handler) HandleCreateCategory(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not create category"})
 		return
 	}
-	category.ID = result.InsertedID.(primitive.ObjectID)
+	category.ID = result.InsertedID.(primitive.ObjectID).Hex()
 	c.JSON(http.StatusCreated, category)
 }
 
@@ -167,8 +167,7 @@ func (h *Handler) HandleGetCategory(c *gin.Context) {
 
 	var category Category
 	err := collection.FindOne(ctx, bson.M{
-		"_id":     categoryID,
-		"user_id": userID,
+		"_id": categoryID,
 	}).Decode(&category)
 
 	if err == mongo.ErrNoDocuments {
@@ -192,6 +191,12 @@ func (h *Handler) HandleUpdateCategory(c *gin.Context) {
 
 	categoryID := c.Param("id")
 
+	objectID, err := primitive.ObjectIDFromHex(categoryID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid category ID"})
+		return
+	}
+
 	var req UpdateCategoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
@@ -199,13 +204,13 @@ func (h *Handler) HandleUpdateCategory(c *gin.Context) {
 	}
 
 	collection := h.mongoClient.Database("MyFinance_Dev").Collection("categories")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Second)
 	defer cancel()
 
 	// Check if trying to update default category
 	var existingCategory Category
-	err := collection.FindOne(ctx, bson.M{
-		"_id":     categoryID,
+	err = collection.FindOne(ctx, bson.M{
+		"_id":     objectID,
 		"user_id": userID,
 	}).Decode(&existingCategory)
 
@@ -244,7 +249,6 @@ func (h *Handler) HandleUpdateCategory(c *gin.Context) {
 		}
 	}
 
-	// Build update document
 	update := bson.M{}
 	if req.Name != "" {
 		update["name"] = req.Name
@@ -259,7 +263,7 @@ func (h *Handler) HandleUpdateCategory(c *gin.Context) {
 	result, err := collection.UpdateOne(
 		ctx,
 		bson.M{
-			"_id":     categoryID,
+			"_id":     objectID,
 			"user_id": userID,
 		},
 		bson.M{"$set": update},
@@ -278,14 +282,14 @@ func (h *Handler) HandleUpdateCategory(c *gin.Context) {
 	// Get updated category
 	var updatedCategory Category
 	err = collection.FindOne(ctx, bson.M{
-		"_id":     categoryID,
+		"_id":     objectID,
 		"user_id": userID,
 	}).Decode(&updatedCategory)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch updated category"})
 		return
 	}
-
+	updatedCategory.ID = objectID.Hex()
 	c.JSON(http.StatusOK, updatedCategory)
 }
 
