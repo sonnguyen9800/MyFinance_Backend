@@ -19,32 +19,37 @@ const (
 
 type Handler struct {
 	mongoClient *mongo.Client
+	jwtSecret   []byte
 	config      *config.Config
 }
 
-func NewHandler(mongoClient *mongo.Client, config *config.Config) *Handler {
+func NewHandler(mongoClient *mongo.Client, config *config.Config, jwtSecret []byte) *Handler {
 	handler := &Handler{
 		mongoClient: mongoClient,
 		config:      config,
+		jwtSecret:   jwtSecret,
 	}
-	// Initialize default category if not exists
-	handler.initializeDefaultCategory()
 	return handler
 }
 
-func (h *Handler) initializeDefaultCategory() {
-	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionCategoriesName)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+// initializeDefaultCategory creates a default category for a specific user if it doesn't exist
+func (h *Handler) initializeDefaultCategory(userID string) {
+	collection := h.mongoClient.Database("MyFinance_Dev").Collection("categories")
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Second)
 	defer cancel()
 
-	// Check if default category exists
-	filter := bson.M{"name": DefaultCategoryName}
+	// Check if default category exists for this user
+	filter := bson.M{
+		"name":    DefaultCategoryName,
+		"user_id": userID,
+	}
 	var existingCategory Category
 	err := collection.FindOne(ctx, filter).Decode(&existingCategory)
 
 	if err == mongo.ErrNoDocuments {
-		// Create default category
+		// Create default category for this user
 		defaultCategory := Category{
+			UserID:   userID,
 			Name:     DefaultCategoryName,
 			Color:    DefaultCategoryColor,
 			IconName: DefaultCategoryIconName,
@@ -52,7 +57,6 @@ func (h *Handler) initializeDefaultCategory() {
 
 		_, err := collection.InsertOne(ctx, defaultCategory)
 		if err != nil {
-			// Log error but don't panic as the service can still function
 			println("Error creating default category:", err.Error())
 		}
 	}
@@ -60,6 +64,12 @@ func (h *Handler) initializeDefaultCategory() {
 
 // Create category
 func (h *Handler) HandleCreateCategory(c *gin.Context) {
+	userID := c.GetString("user_id")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found"})
+		return
+	}
+
 	var req CreateCategoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
@@ -76,8 +86,14 @@ func (h *Handler) HandleCreateCategory(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Check if category with same name exists
-	existingFilter := bson.M{"name": req.Name}
+	// Initialize default category if it doesn't exist
+	h.initializeDefaultCategory(userID)
+
+	// Check if category with same name exists for this user
+	existingFilter := bson.M{
+		"name":    req.Name,
+		"user_id": userID,
+	}
 	var existingCategory Category
 	err := collection.FindOne(ctx, existingFilter).Decode(&existingCategory)
 	if err == nil {
@@ -86,6 +102,7 @@ func (h *Handler) HandleCreateCategory(c *gin.Context) {
 	}
 
 	category := Category{
+		UserID:   userID,
 		Name:     req.Name,
 		Color:    req.Color,
 		IconName: req.IconName,
@@ -100,20 +117,30 @@ func (h *Handler) HandleCreateCategory(c *gin.Context) {
 	c.JSON(http.StatusCreated, category)
 }
 
-// Get all categories
+// Get all categories for a user
 func (h *Handler) HandleGetCategories(c *gin.Context) {
-	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionCategoriesName)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	userID := c.GetString("user_id")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found"})
+		return
+	}
+
+	collection := h.mongoClient.Database("MyFinance_Dev").Collection("categories")
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Second)
 	defer cancel()
 
-	cursor, err := collection.Find(ctx, bson.M{})
+	// Initialize default category if it doesn't exist
+	h.initializeDefaultCategory(userID)
+
+	// Find all categories for this user
+	cursor, err := collection.Find(ctx, bson.M{"user_id": userID})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch categories"})
 		return
 	}
 	defer cursor.Close(ctx)
 
-	var categories []Category
+	var categories []Category = make([]Category, 0)
 	if err = cursor.All(ctx, &categories); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not decode categories"})
 		return
@@ -124,14 +151,23 @@ func (h *Handler) HandleGetCategories(c *gin.Context) {
 
 // Get single category
 func (h *Handler) HandleGetCategory(c *gin.Context) {
+	userID := c.GetString("user_id")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found"})
+		return
+	}
+
 	categoryID := c.Param("id")
 
-	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionCategoriesName)
+	collection := h.mongoClient.Database("MyFinance_Dev").Collection("categories")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	var category Category
-	err := collection.FindOne(ctx, bson.M{"_id": categoryID}).Decode(&category)
+	err := collection.FindOne(ctx, bson.M{
+		"_id":     categoryID,
+		"user_id": userID,
+	}).Decode(&category)
 
 	if err == mongo.ErrNoDocuments {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Category not found"})
@@ -146,6 +182,12 @@ func (h *Handler) HandleGetCategory(c *gin.Context) {
 
 // Update category
 func (h *Handler) HandleUpdateCategory(c *gin.Context) {
+	userID := c.GetString("user_id")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found"})
+		return
+	}
+
 	categoryID := c.Param("id")
 
 	var req UpdateCategoryRequest
@@ -154,14 +196,23 @@ func (h *Handler) HandleUpdateCategory(c *gin.Context) {
 		return
 	}
 
-	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionCategoriesName)
+	collection := h.mongoClient.Database("MyFinance_Dev").Collection("categories")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	// Check if trying to update default category
 	var existingCategory Category
-	err := collection.FindOne(ctx, bson.M{"_id": categoryID}).Decode(&existingCategory)
-	if err == nil && existingCategory.Name == DefaultCategoryName {
+	err := collection.FindOne(ctx, bson.M{
+		"_id":     categoryID,
+		"user_id": userID,
+	}).Decode(&existingCategory)
+
+	if err == mongo.ErrNoDocuments {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Category not found"})
+		return
+	}
+
+	if existingCategory.Name == DefaultCategoryName {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Cannot modify default category"})
 		return
 	}
@@ -173,9 +224,13 @@ func (h *Handler) HandleUpdateCategory(c *gin.Context) {
 			return
 		}
 
-		// Check for name conflict with other categories
+		// Check for name conflict with other categories for this user
 		var conflictCategory Category
-		err := collection.FindOne(ctx, bson.M{"name": req.Name, "_id": bson.M{"$ne": categoryID}}).Decode(&conflictCategory)
+		err := collection.FindOne(ctx, bson.M{
+			"name":    req.Name,
+			"user_id": userID,
+			"_id":     bson.M{"$ne": categoryID},
+		}).Decode(&conflictCategory)
 		if err == nil {
 			c.JSON(http.StatusConflict, gin.H{"error": "Category with this name already exists"})
 			return
@@ -196,7 +251,10 @@ func (h *Handler) HandleUpdateCategory(c *gin.Context) {
 
 	result, err := collection.UpdateOne(
 		ctx,
-		bson.M{"_id": categoryID},
+		bson.M{
+			"_id":     categoryID,
+			"user_id": userID,
+		},
 		bson.M{"$set": update},
 	)
 
@@ -212,7 +270,10 @@ func (h *Handler) HandleUpdateCategory(c *gin.Context) {
 
 	// Get updated category
 	var updatedCategory Category
-	err = collection.FindOne(ctx, bson.M{"_id": categoryID}).Decode(&updatedCategory)
+	err = collection.FindOne(ctx, bson.M{
+		"_id":     categoryID,
+		"user_id": userID,
+	}).Decode(&updatedCategory)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch updated category"})
 		return
@@ -223,21 +284,40 @@ func (h *Handler) HandleUpdateCategory(c *gin.Context) {
 
 // Delete category
 func (h *Handler) HandleDeleteCategory(c *gin.Context) {
+	userID := c.GetString("user_id")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found"})
+		return
+	}
+
 	categoryID := c.Param("id")
 
-	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionCategoriesName)
+	collection := h.mongoClient.Database("MyFinance_Dev").Collection("categories")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	// Check if trying to delete default category
 	var category Category
-	err := collection.FindOne(ctx, bson.M{"_id": categoryID}).Decode(&category)
-	if err == nil && category.Name == DefaultCategoryName {
+	err := collection.FindOne(ctx, bson.M{
+		"_id":     categoryID,
+		"user_id": userID,
+	}).Decode(&category)
+
+	if err == mongo.ErrNoDocuments {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Category not found"})
+		return
+	}
+
+	if category.Name == DefaultCategoryName {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Cannot delete default category"})
 		return
 	}
 
-	result, err := collection.DeleteOne(ctx, bson.M{"_id": categoryID})
+	result, err := collection.DeleteOne(ctx, bson.M{
+		"_id":     categoryID,
+		"user_id": userID,
+	})
+
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not delete category"})
 		return

@@ -84,7 +84,7 @@ func main() {
 	authHandler := authentication.NewHandler(client, config, []byte(config.JWTSecret))
 	expenseHandler := expense.NewHandler(client, config, []byte(config.JWTSecret))
 
-	categoryHandler := category.NewHandler(client, config)
+	categoryHandler := category.NewHandler(client, config, []byte(config.JWTSecret))
 	tagHandler := tag.NewHandler(client, config)
 	// Initialize Gin router
 	r := gin.Default()
