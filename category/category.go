@@ -4,6 +4,7 @@ import (
 	"context"
 	"my-finance-backend/config"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -79,7 +80,7 @@ func (h *Handler) HandleCreateCategory(c *gin.Context) {
 	}
 
 	// Check if name is default category
-	if req.Name == DefaultCategoryName {
+	if req.Name == DefaultCategoryName || strings.TrimSpace(req.Name) == DefaultCategoryName {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot create category with reserved name 'Default'"})
 		return
 	}
@@ -202,6 +203,7 @@ func (h *Handler) HandleUpdateCategory(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
+	req.Name = strings.TrimSpace(req.Name)
 
 	collection := h.mongoClient.Database("MyFinance_Dev").Collection("categories")
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Second)
@@ -221,11 +223,6 @@ func (h *Handler) HandleUpdateCategory(c *gin.Context) {
 
 	if err == mongo.ErrNoDocuments {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Category not found"})
-		return
-	}
-
-	if existingCategory.Name == DefaultCategoryName {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Cannot modify default category"})
 		return
 	}
 
@@ -250,6 +247,12 @@ func (h *Handler) HandleUpdateCategory(c *gin.Context) {
 	}
 
 	update := bson.M{}
+
+	if existingCategory.Name == DefaultCategoryName && req.Name != existingCategory.Name {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Cannot modify default category's name"})
+		return
+	}
+
 	if req.Name != "" {
 		update["name"] = req.Name
 	}
