@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -49,6 +50,7 @@ func (h *Handler) initializeDefaultCategory(userID string) {
 	if err == mongo.ErrNoDocuments {
 		// Create default category for this user
 		defaultCategory := Category{
+			//ID:       primitive.NewObjectID().Hex(),
 			UserID:   userID,
 			Name:     DefaultCategoryName,
 			Color:    DefaultCategoryColor,
@@ -108,12 +110,12 @@ func (h *Handler) HandleCreateCategory(c *gin.Context) {
 		IconName: req.IconName,
 	}
 
-	_, err = collection.InsertOne(ctx, category)
+	result, err := collection.InsertOne(ctx, category)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not create category"})
 		return
 	}
-
+	category.ID = result.InsertedID.(primitive.ObjectID)
 	c.JSON(http.StatusCreated, category)
 }
 
@@ -206,6 +208,11 @@ func (h *Handler) HandleUpdateCategory(c *gin.Context) {
 		"_id":     categoryID,
 		"user_id": userID,
 	}).Decode(&existingCategory)
+
+	if (err == context.DeadlineExceeded) || (err == context.Canceled) {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch category. Too long to respond."})
+		return
+	}
 
 	if err == mongo.ErrNoDocuments {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Category not found"})
