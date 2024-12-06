@@ -47,7 +47,3 @@ type GetMontlyExpensesResponse struct {
 	Expenses    []Expense `json:"expenses"`
 	TotalAmount int64     `json:"total_count"`
 }
-type GetMontlyExpensesRequest struct {
-	Month byte  `json:"month"`
-	Year  int16 `json:"year"`
-}

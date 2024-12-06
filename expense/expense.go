@@ -160,11 +160,83 @@ func (h *Handler) HandleCreateExpense(c *gin.Context) {
 }
 
 func (h *Handler) HandleGetExpensesMonthly(c *gin.Context) {
+	userID := c.GetString("user_id")
+
+	month := 0
+	year := 0
+	if monthStr := c.Query("month"); monthStr != "" {
+		if _, err := fmt.Sscanf(monthStr, "%d", &month); err != nil || month < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid month parameter"})
+			return
+		}
+	}
+
+	if yearStr := c.Query("year"); yearStr != "" {
+		if _, err := fmt.Sscanf(yearStr, "%d", &year); err != nil || year < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid year parameter"})
+			return
+		}
+	}
+
+	// Validate month (1-12)
+	if month < 1 || month > 13 {
+		c.JSON(http.StatusBadRequest,
+			gin.H{
+				"error":         "Month must be between 1 and 12, current month: $month",
+				"current month": month,
+				"current year":  year,
+			})
+		return
+	}
+	month_string := time.Month(month)
+
+	// Get first day of the month
+	startDate := time.Date(year, month_string, 1, 0, 0, 0, 0, time.UTC)
+	// Get first day of next month
+	endDate := startDate.AddDate(0, 1, 0)
+
+	// Format dates as strings (YYYY-MM-DD)
+	startDateStr := startDate.Format("2006-01-02")
+	endDateStr := endDate.Format("2006-01-02")
+
+	// Build filter for the date range and user
+	filter := bson.M{
+		"user_id": userID,
+		"date": bson.M{
+			"$gte": startDateStr,
+			"$lt":  endDateStr,
+		},
+	}
+
+	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionExpensesName)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Get expenses for the month
+	cursor, err := collection.Find(ctx, filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch expenses"})
+		return
+	}
+	defer cursor.Close(ctx)
+
+	var expenses []Expense = make([]Expense, 0)
+	if err = cursor.All(ctx, &expenses); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not decode expenses"})
+		return
+	}
+
+	// Calculate total amount
+	var totalAmount float64
+	for _, expense := range expenses {
+		totalAmount += expense.Amount
+	}
 
 	response := GetMontlyExpensesResponse{
-		Expenses:    []Expense{},
-		TotalAmount: 0,
+		Expenses:    expenses,
+		TotalAmount: int64(totalAmount),
 	}
+
 	c.JSON(http.StatusOK, response)
 }
 
