@@ -107,17 +107,21 @@ func (h *Handler) HandleCreateExpense(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
-	req.Date = time.Now().Format("2006-01-02")
+
+	// Set current date if not provided
+	if req.Date == "" {
+		req.Date = time.Now().Format("2006-01-02")
+	}
 
 	expense := Expense{
 		ID:           primitive.NewObjectID().Hex(),
 		UserID:       userID,
+		CategoryID:   req.CategoryID,
 		Amount:       req.Amount,
 		CurrencyCode: req.CurrencyCode,
 		Name:         req.Name,
 		Description:  req.Description,
 		Date:         req.Date,
-		CategoryID:   req.CategoryID,
 	}
 
 	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionExpensesName)
@@ -154,12 +158,17 @@ func (h *Handler) HandleGetExpenses(c *gin.Context) {
 		}
 	}
 
+	// Build filter
+	filter := bson.M{"user_id": userID}
+
+	// Add category filter if provided
+	if categoryID := c.Query("category_id"); categoryID != "" {
+		filter["category_id"] = categoryID
+	}
+
 	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionExpensesName)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-
-	// Create filter for user's expenses
-	filter := bson.M{"user_id": userID}
 
 	// Get total count of expenses
 	totalCount, err := collection.CountDocuments(ctx, filter)
@@ -172,7 +181,7 @@ func (h *Handler) HandleGetExpenses(c *gin.Context) {
 	totalPages := int(math.Ceil(float64(totalCount) / float64(limit)))
 	currentPage := (offset / limit) + 1
 
-	// Find expenses with pagination
+	// Get paginated expenses
 	findOptions := options.Find().
 		SetSkip(int64(offset)).
 		SetLimit(int64(limit)).
@@ -198,6 +207,7 @@ func (h *Handler) HandleGetExpenses(c *gin.Context) {
 		TotalPages:  totalPages,
 		Limit:       limit,
 	}
+
 	c.JSON(http.StatusOK, response)
 }
 
