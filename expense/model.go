@@ -41,3 +41,13 @@ type GetLastExpensesResponse struct {
 	TotalExpensesLast30Days float64 `json:"total_expenses_last_30_days"`
 	TotalExpensesLast7Days  float64 `json:"total_expenses_last_7_days"`
 }
+
+// PaginatedExpenseResponse represents the paginated response for expenses
+type GetMontlyExpensesResponse struct {
+	Expenses    []Expense `json:"expenses"`
+	TotalAmount int64     `json:"total_count"`
+}
+type GetMontlyExpensesRequest struct {
+	Month byte  `json:"month"`
+	Year  int16 `json:"year"`
+}

@@ -159,6 +159,15 @@ func (h *Handler) HandleCreateExpense(c *gin.Context) {
 	c.JSON(http.StatusCreated, expense)
 }
 
+func (h *Handler) HandleGetExpensesMonthly(c *gin.Context) {
+
+	response := GetMontlyExpensesResponse{
+		Expenses:    []Expense{},
+		TotalAmount: 0,
+	}
+	c.JSON(http.StatusOK, response)
+}
+
 // Get all expenses for user with pagination
 func (h *Handler) HandleGetExpenses(c *gin.Context) {
 	userID := c.GetString("user_id")
