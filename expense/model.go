@@ -45,5 +45,5 @@ type GetLastExpensesResponse struct {
 // PaginatedExpenseResponse represents the paginated response for expenses
 type GetMontlyExpensesResponse struct {
 	Expenses    []Expense `json:"expenses"`
-	TotalAmount int64     `json:"total_count"`
+	TotalAmount int64     `json:"total_amount"`
 }
