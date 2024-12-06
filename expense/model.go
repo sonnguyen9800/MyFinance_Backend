@@ -8,6 +8,7 @@ type Expense struct {
 	Name         string  `bson:"name" json:"name"`
 	Description  string  `bson:"description" json:"description"`
 	Date         string  `bson:"date" json:"date"`
+	CategoryID   string  `bson:"category_id,omitempty" json:"category_id,omitempty"`
 }
 
 type CreateExpenseRequest struct {
@@ -16,6 +17,7 @@ type CreateExpenseRequest struct {
 	Name         string  `json:"name" binding:"required"`
 	Description  string  `json:"description"`
 	Date         string  `json:"date"`
+	CategoryID   string  `bson:"category_id,omitempty" json:"category_id,omitempty"`
 }
 
 type UpdateExpenseRequest struct {
@@ -23,6 +25,7 @@ type UpdateExpenseRequest struct {
 	CurrencyCode string  `json:"currency_code"`
 	Name         string  `json:"name"`
 	Description  string  `json:"description"`
+	CategoryID   string  `bson:"category_id,omitempty" json:"category_id,omitempty"`
 }
 
 // PaginatedExpenseResponse represents the paginated response for expenses

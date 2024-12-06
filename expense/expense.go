@@ -117,6 +117,7 @@ func (h *Handler) HandleCreateExpense(c *gin.Context) {
 		Name:         req.Name,
 		Description:  req.Description,
 		Date:         req.Date,
+		CategoryID:   req.CategoryID,
 	}
 
 	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionExpensesName)
@@ -254,6 +255,9 @@ func (h *Handler) HandleUpdateExpense(c *gin.Context) {
 	}
 	if req.Description != "" {
 		update["description"] = req.Description
+	}
+	if req.CategoryID != "" {
+		update["category_id"] = req.CategoryID
 	}
 
 	result, err := collection.UpdateOne(
