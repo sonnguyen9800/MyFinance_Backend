@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"my-finance-backend/category"
 	"my-finance-backend/config"
+	"my-finance-backend/utils"
 	"net/http"
 	"time"
 
@@ -127,6 +129,26 @@ func (h *Handler) HandleCreateExpense(c *gin.Context) {
 	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionExpensesName)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
+	categoryID := req.CategoryID
+	if categoryID != "" {
+		collectionCategory := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionCategoriesName)
+
+		categoryObjectId, error := utils.StringToObjectId(categoryID)
+		if error != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid category ID"})
+			return
+		}
+		// Check if category exists
+		filter := bson.M{"_id": categoryObjectId}
+		var category category.Category
+		err := collectionCategory.FindOne(ctx, filter).Decode(&category)
+		if err == mongo.ErrNoDocuments {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Category not found"})
+			return
+		}
+
+	}
 
 	_, err := collection.InsertOne(ctx, expense)
 	if err != nil {
