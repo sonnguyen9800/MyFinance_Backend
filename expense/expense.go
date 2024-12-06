@@ -276,8 +276,8 @@ func (h *Handler) HandleUpdateExpense(c *gin.Context) {
 
 	// Build update document
 	update := bson.M{}
-	if req.Expense != 0 {
-		update["expense"] = req.Expense
+	if req.Amount != 0 {
+		update["amount"] = req.Amount
 	}
 	if req.CurrencyCode != "" {
 		update["currency_code"] = req.CurrencyCode
@@ -288,8 +288,26 @@ func (h *Handler) HandleUpdateExpense(c *gin.Context) {
 	if req.Description != "" {
 		update["description"] = req.Description
 	}
-	if req.CategoryID != "" {
+
+	categoryID := req.CategoryID
+	if categoryID != "" {
+		collectionCategory := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionCategoriesName)
+
+		categoryObjectId, error := utils.StringToObjectId(categoryID)
+		if error != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid category ID"})
+			return
+		}
+		// Check if category exists
+		filter := bson.M{"_id": categoryObjectId}
+		var category category.Category
+		err := collectionCategory.FindOne(ctx, filter).Decode(&category)
+		if err == mongo.ErrNoDocuments {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Category not found"})
+			return
+		}
 		update["category_id"] = req.CategoryID
+
 	}
 
 	result, err := collection.UpdateOne(

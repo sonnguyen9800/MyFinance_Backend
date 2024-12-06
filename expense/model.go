@@ -21,7 +21,7 @@ type CreateExpenseRequest struct {
 }
 
 type UpdateExpenseRequest struct {
-	Expense      float64 `json:"expense"`
+	Amount       float64 `json:"amount"`
 	CurrencyCode string  `json:"currency_code"`
 	Name         string  `json:"name"`
 	Description  string  `json:"description"`
