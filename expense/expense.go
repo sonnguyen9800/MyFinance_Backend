@@ -549,6 +549,17 @@ func (h *Handler) HandleUploadCSV(c *gin.Context) {
 		// Parse price and multiply by 1000
 		priceStr := strings.TrimSpace(record[2])
 		price, err := strconv.ParseFloat(priceStr, 64)
+
+		name := strings.TrimSpace(record[1])
+
+		if name == "" && priceStr == "" {
+			lineCount++
+			continue
+		}
+		if name == "" {
+			name = "No Name"
+		}
+
 		if err != nil {
 			errors = append(errors, fmt.Sprintf("Line %d: Invalid price", lineCount))
 			response.ErrorCount++
@@ -563,18 +574,27 @@ func (h *Handler) HandleUploadCSV(c *gin.Context) {
 			price = price * 1000 // Multiply by 1000 as per requirement
 		}
 		// Create expense
-		name := strings.TrimSpace(record[1])
-		if name == "" {
-			name = "No Name"
-		}
 
 		expense := Expense{
 			UserID:       userID,
 			Amount:       price,
-			CurrencyCode: currency, // Default currency
+			CurrencyCode: currency,
 			Name:         name,
 			Description:  strings.TrimSpace(record[3]),
 			Date:         date.Format("2006-01-02"),
+		}
+		// Check if expense with same name and date existed
+		existingExpense := Expense{}
+		err = collection.FindOne(ctx, bson.M{
+			"user_id": userID,
+			"name":    expense.Name,
+			"date":    expense.Date,
+		}).Decode(&existingExpense)
+		if err == nil {
+			errors = append(errors, fmt.Sprintf("Line %d: Expense with same name and date existed", lineCount))
+			response.ErrorCount++
+			lineCount++
+			continue
 		}
 
 		// Insert expense
@@ -637,8 +657,12 @@ func (h *Handler) HandleDownloadCSV(c *gin.Context) {
 		}
 	}
 
-	// Create CSV buffer
+	// Create CSV buffer with UTF-8 BOM
 	buf := new(bytes.Buffer)
+
+	// Write UTF-8 BOM
+	buf.Write([]byte{0xEF, 0xBB, 0xBF})
+
 	writer := csv.NewWriter(buf)
 
 	// Write header
@@ -686,7 +710,7 @@ func (h *Handler) HandleDownloadCSV(c *gin.Context) {
 
 	c.Header("Content-Description", "File Transfer")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
-	c.Header("Content-Type", "text/csv")
+	c.Header("Content-Type", "text/csv; charset=utf-8")
 	c.Header("Content-Transfer-Encoding", "binary")
 	c.Header("Expires", "0")
 	c.Header("Cache-Control", "must-revalidate")
