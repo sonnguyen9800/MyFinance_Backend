@@ -119,6 +119,7 @@ func main() {
 		auth.GET("/expenses", expenseHandler.HandleGetExpenses)
 		auth.GET("/expenses_last", expenseHandler.HandleGetLastExpenses)
 		auth.GET("/expenses_montly", expenseHandler.HandleGetExpensesMonthly)
+		auth.POST("/expenses/upload", expenseHandler.HandleUploadCSV)
 
 		auth.GET("/expenses/:id", expenseHandler.HandleGetExpense)
 		auth.PUT("/expenses/:id", expenseHandler.HandleUpdateExpense)

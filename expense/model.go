@@ -47,3 +47,16 @@ type GetMontlyExpensesResponse struct {
 	Expenses    []Expense `json:"expenses"`
 	TotalAmount int64     `json:"total_amount"`
 }
+
+type CSVUploadResponse struct {
+	SuccessCount int      `json:"success_count"`
+	ErrorCount   int      `json:"error_count"`
+	Errors       []string `json:"errors,omitempty"`
+}
+
+type CSVExpense struct {
+	Date  string  // MM/dd/YYYY
+	Name  string
+	Price float64
+	Note  string
+}

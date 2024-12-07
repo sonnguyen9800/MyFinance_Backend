@@ -2,13 +2,17 @@ package expense
 
 import (
 	"context"
+	"encoding/csv"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"my-finance-backend/category"
 	"my-finance-backend/config"
 	"my-finance-backend/utils"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -450,4 +454,113 @@ func (h *Handler) HandleDeleteExpense(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Expense deleted successfully"})
+}
+
+// HandleUploadCSV handles the upload of expenses via CSV file
+func (h *Handler) HandleUploadCSV(c *gin.Context) {
+	userID := c.GetString("user_id")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found"})
+		return
+	}
+
+	// Get the file from the request
+	file, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No file uploaded"})
+		return
+	}
+
+	// Check file extension
+	if !strings.HasSuffix(strings.ToLower(file.Filename), ".csv") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "File must be a CSV"})
+		return
+	}
+
+	// Open the file
+	src, err := file.Open()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not open file"})
+		return
+	}
+	defer src.Close()
+
+	// Create CSV reader
+	reader := csv.NewReader(src)
+	reader.FieldsPerRecord = 4 // Expecting 4 fields: Date, Name, Price, Note
+	reader.TrimLeadingSpace = true
+
+	// Skip header if exists
+	_, err = reader.Read()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Could not read CSV header"})
+		return
+	}
+
+	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionExpensesName)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var response CSVUploadResponse
+	var errors []string
+
+	// Process each row
+	lineCount := 2 // Start from line 2 (after header)
+	for {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("Line %d: Could not read row", lineCount))
+			response.ErrorCount++
+			lineCount++
+			continue
+		}
+
+		// Parse date (MM/dd/YYYY)
+		date, err := time.Parse("1/2/2006", record[0])
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("Line %d: Invalid date format", lineCount))
+			response.ErrorCount++
+			lineCount++
+			continue
+		}
+
+		// Parse price and multiply by 1000
+		priceStr := strings.TrimSpace(record[2])
+		price, err := strconv.ParseFloat(priceStr, 64)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("Line %d: Invalid price", lineCount))
+			response.ErrorCount++
+			lineCount++
+			continue
+		}
+		price = price * 1000 // Multiply by 1000 as per requirement
+
+		// Create expense
+		expense := Expense{
+			ID:           primitive.NewObjectID().Hex(),
+			UserID:       userID,
+			Amount:       price,
+			CurrencyCode: "VND", // Default currency
+			Name:         strings.TrimSpace(record[1]),
+			Description:  strings.TrimSpace(record[3]),
+			Date:         date.Format("2006-01-02"),
+		}
+
+		// Insert expense
+		_, err = collection.InsertOne(ctx, expense)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("Line %d: Could not save expense", lineCount))
+			response.ErrorCount++
+		} else {
+			response.SuccessCount++
+		}
+
+		lineCount++
+	}
+
+	response.Errors = errors
+	c.JSON(http.StatusOK, response)
 }
