@@ -1,7 +1,7 @@
 package expense
 
 type Expense struct {
-	ID           string  `bson:"_id" json:"id"`
+	ID           string  `bson:"_id,omitempty"  json:"id,omitempty"`
 	UserID       string  `bson:"user_id" json:"user_id"`
 	CategoryID   string  `bson:"category_id,omitempty" json:"category_id,omitempty"`
 	Amount       float64 `bson:"amount" json:"amount"`
@@ -55,8 +55,18 @@ type CSVUploadResponse struct {
 }
 
 type CSVExpense struct {
-	Date  string  // MM/dd/YYYY
+	Date  string // MM/dd/YYYY
 	Name  string
 	Price float64
 	Note  string
+}
+
+type CSVExportExpense struct {
+	Date         string
+	Name         string
+	Amount       float64
+	CurrencyCode string
+	Description  string
+	CategoryID   string
+	CategoryName string
 }

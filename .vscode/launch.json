@@ -12,6 +12,14 @@
           "preLaunchTask": "Start Air",
           "mode": "debug",
           "args": []
+        },
+        {
+          "name": "Run without Live Reload",
+          "type": "go",
+          "request": "launch",
+          "program": "${workspaceFolder}",
+          "mode": "debug",
+          "args": []
         }
     ]
 }

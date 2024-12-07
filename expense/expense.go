@@ -1,6 +1,7 @@
 package expense
 
 import (
+	"bytes"
 	"context"
 	"encoding/csv"
 	"fmt"
@@ -120,7 +121,6 @@ func (h *Handler) HandleCreateExpense(c *gin.Context) {
 	}
 
 	expense := Expense{
-		ID:           primitive.NewObjectID().Hex(),
 		UserID:       userID,
 		CategoryID:   req.CategoryID,
 		Amount:       req.Amount,
@@ -154,11 +154,12 @@ func (h *Handler) HandleCreateExpense(c *gin.Context) {
 
 	}
 
-	_, err := collection.InsertOne(ctx, expense)
+	result, err := collection.InsertOne(ctx, expense)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not create expense"})
 		return
 	}
+	expense.ID = result.InsertedID.(primitive.ObjectID).Hex()
 
 	c.JSON(http.StatusCreated, expense)
 }
@@ -483,11 +484,11 @@ func (h *Handler) HandleUploadCSV(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not open file"})
 		return
 	}
-	defer src.Close()
+	// defer src.Close()
 
 	// Create CSV reader
 	reader := csv.NewReader(src)
-	reader.FieldsPerRecord = 4 // Expecting 4 fields: Date, Name, Price, Note
+	reader.FieldsPerRecord = 5 // Expecting 4 fields: Date, Name, Price, Note
 	reader.TrimLeadingSpace = true
 
 	// Skip header if exists
@@ -505,7 +506,9 @@ func (h *Handler) HandleUploadCSV(c *gin.Context) {
 	var errors []string
 
 	// Process each row
-	lineCount := 2 // Start from line 2 (after header)
+	lineCount := 2            // Start from line 2 (after header)
+	var currentDate time.Time // Keep track of the current date for empty date fields
+
 	for {
 		record, err := reader.Read()
 		if err == io.EOF {
@@ -518,13 +521,29 @@ func (h *Handler) HandleUploadCSV(c *gin.Context) {
 			continue
 		}
 
-		// Parse date (MM/dd/YYYY)
-		date, err := time.Parse("1/2/2006", record[0])
-		if err != nil {
-			errors = append(errors, fmt.Sprintf("Line %d: Invalid date format", lineCount))
-			response.ErrorCount++
-			lineCount++
-			continue
+		// Clean and process date
+		dateStr := strings.TrimSpace(record[0])
+		var date time.Time
+
+		if dateStr == "" {
+			// If date is empty, use the previous date
+			if currentDate.IsZero() {
+				errors = append(errors, fmt.Sprintf("Line %d: Empty date field with no previous valid date", lineCount))
+				response.ErrorCount++
+				lineCount++
+				continue
+			}
+			date = currentDate
+		} else {
+			// Parse date (MM/dd/YYYY)
+			date, err = time.Parse("1/2/2006", dateStr)
+			if err != nil {
+				errors = append(errors, fmt.Sprintf("Line %d: Invalid date format", lineCount))
+				response.ErrorCount++
+				lineCount++
+				continue
+			}
+			currentDate = date // Update current date for next empty date field
 		}
 
 		// Parse price and multiply by 1000
@@ -536,15 +555,24 @@ func (h *Handler) HandleUploadCSV(c *gin.Context) {
 			lineCount++
 			continue
 		}
-		price = price * 1000 // Multiply by 1000 as per requirement
-
+		currency := strings.TrimSpace(record[4])
+		if currency == "" {
+			currency = "VND"
+		}
+		if currency == "VND" {
+			price = price * 1000 // Multiply by 1000 as per requirement
+		}
 		// Create expense
+		name := strings.TrimSpace(record[1])
+		if name == "" {
+			name = "No Name"
+		}
+
 		expense := Expense{
-			ID:           primitive.NewObjectID().Hex(),
 			UserID:       userID,
 			Amount:       price,
-			CurrencyCode: "VND", // Default currency
-			Name:         strings.TrimSpace(record[1]),
+			CurrencyCode: currency, // Default currency
+			Name:         name,
 			Description:  strings.TrimSpace(record[3]),
 			Date:         date.Format("2006-01-02"),
 		}
@@ -563,4 +591,106 @@ func (h *Handler) HandleUploadCSV(c *gin.Context) {
 
 	response.Errors = errors
 	c.JSON(http.StatusOK, response)
+}
+
+// HandleDownloadCSV handles the download of all expenses in CSV format
+func (h *Handler) HandleDownloadCSV(c *gin.Context) {
+	userID := c.GetString("user_id")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found"})
+		return
+	}
+
+	// Get all expenses for the user
+	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionExpensesName)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Sort by date
+	findOptions := options.Find().SetSort(bson.D{{Key: "date", Value: 1}})
+	cursor, err := collection.Find(ctx, bson.M{"user_id": userID}, findOptions)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch expenses"})
+		return
+	}
+	defer cursor.Close(ctx)
+
+	var expenses []Expense
+	if err = cursor.All(ctx, &expenses); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not decode expenses"})
+		return
+	}
+
+	// Create a map of category IDs to names
+	categoryCollection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionCategoriesName)
+	categoryMap := make(map[string]string)
+
+	for _, expense := range expenses {
+		if expense.CategoryID != "" {
+			if _, exists := categoryMap[expense.CategoryID]; !exists {
+				var cat category.Category
+				err := categoryCollection.FindOne(ctx, bson.M{"_id": expense.CategoryID}).Decode(&cat)
+				if err == nil {
+					categoryMap[expense.CategoryID] = cat.Name
+				}
+			}
+		}
+	}
+
+	// Create CSV buffer
+	buf := new(bytes.Buffer)
+	writer := csv.NewWriter(buf)
+
+	// Write header
+	header := []string{"Date", "Name", "Amount", "CurrencyCode", "Description", "CategoryID", "Category"}
+	if err := writer.Write(header); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not write CSV header"})
+		return
+	}
+
+	// Write data
+	for _, expense := range expenses {
+		// Get category name if exists
+		categoryName := ""
+		if expense.CategoryID != "" {
+			categoryName = categoryMap[expense.CategoryID]
+		}
+
+		// Format date from YYYY-MM-DD to MM/dd/YYYY
+		date, err := time.Parse("2006-01-02", expense.Date)
+		if err == nil {
+			expense.Date = date.Format("1/2/2006")
+		}
+
+		row := []string{
+			expense.Date,
+			expense.Name,
+			fmt.Sprintf("%.2f", expense.Amount), // Keep original amount (already x1000)
+			expense.CurrencyCode,
+			expense.Description,
+			expense.CategoryID,
+			categoryName,
+		}
+
+		if err := writer.Write(row); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not write CSV row"})
+			return
+		}
+	}
+
+	writer.Flush()
+
+	// Set headers for file download
+	currentTime := time.Now().Format("20060102_150405")
+	filename := fmt.Sprintf("expenses_%s.csv", currentTime)
+
+	c.Header("Content-Description", "File Transfer")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	c.Header("Content-Type", "text/csv")
+	c.Header("Content-Transfer-Encoding", "binary")
+	c.Header("Expires", "0")
+	c.Header("Cache-Control", "must-revalidate")
+	c.Header("Pragma", "public")
+
+	c.Data(http.StatusOK, "text/csv", buf.Bytes())
 }
