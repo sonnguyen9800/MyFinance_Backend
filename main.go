@@ -98,7 +98,7 @@ func main() {
 		info.GoVersion = runtime.Version()
 		info.ServerEnv = config.AppEnv
 
-		c.JSON(http.StatusOK, gin.H{"status": "ok", "info": info})
+		c.JSON(http.StatusOK, info)
 	})
 	r.POST("/api/login", authHandler.HandleLogin)
 	r.POST("/api/signin", authHandler.HandleLogin)
