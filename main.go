@@ -8,7 +8,9 @@ import (
 	"my-finance-backend/expense"
 	"my-finance-backend/tag"
 	"my-finance-backend/users"
+	"my-finance-backend/version"
 	"net/http"
+	"runtime"
 	"strings"
 	"time"
 
@@ -90,6 +92,14 @@ func main() {
 	r := gin.Default()
 
 	// Public routes
+	r.GET("/api/ping", func(c *gin.Context) {
+		info := version.GetInfo()
+		// Add runtime information
+		info.GoVersion = runtime.Version()
+		info.ServerEnv = config.AppEnv
+
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "info": info})
+	})
 	r.POST("/api/login", authHandler.HandleLogin)
 	r.POST("/api/signin", authHandler.HandleLogin)
 	r.POST("/api/signup", authHandler.HandleSignup)
