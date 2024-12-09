@@ -130,7 +130,7 @@ func (h *Handler) HandleGetCategories(c *gin.Context) {
 	}
 
 	collection := h.mongoClient.Database("MyFinance_Dev").Collection("categories")
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	// Initialize default category if it doesn't exist
@@ -167,9 +167,15 @@ func (h *Handler) HandleGetCategory(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	objectId, error := utils.StringToObjectId(categoryID)
+	if error != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid category ID " + error.Error()})
+		return
+	}
+
 	var category Category
 	err := collection.FindOne(ctx, bson.M{
-		"_id": categoryID,
+		"_id": objectId,
 	}).Decode(&category)
 
 	if err == mongo.ErrNoDocuments {
