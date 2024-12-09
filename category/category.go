@@ -3,6 +3,7 @@ package category
 import (
 	"context"
 	"my-finance-backend/config"
+	"my-finance-backend/utils"
 	"net/http"
 	"strings"
 	"time"
@@ -310,10 +311,16 @@ func (h *Handler) HandleDeleteCategory(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	objectId, error := utils.StringToObjectId(categoryID)
+	if error != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid category ID " + error.Error()})
+		return
+	}
+
 	// Check if trying to delete default category
 	var category Category
 	err := collection.FindOne(ctx, bson.M{
-		"_id":     categoryID,
+		"_id":     objectId,
 		"user_id": userID,
 	}).Decode(&category)
 
@@ -328,7 +335,7 @@ func (h *Handler) HandleDeleteCategory(c *gin.Context) {
 	}
 
 	result, err := collection.DeleteOne(ctx, bson.M{
-		"_id":     categoryID,
+		"_id":     objectId,
 		"user_id": userID,
 	})
 
