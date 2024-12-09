@@ -327,10 +327,16 @@ func (h *Handler) HandleGetExpense(c *gin.Context) {
 	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionExpensesName)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	objectId, error := utils.StringToObjectId(expenseID)
+
+	if error != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid expense ID " + error.Error()})
+		return
+	}
 
 	var expense Expense
 	err := collection.FindOne(ctx, bson.M{
-		"_id":     expenseID,
+		"_id":     objectId,
 		"user_id": userID,
 	}).Decode(&expense)
 
@@ -446,9 +452,13 @@ func (h *Handler) HandleDeleteExpense(c *gin.Context) {
 	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionExpensesName)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-
+	objectId, error := utils.StringToObjectId(expenseID)
+	if error != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid expense ID " + error.Error()})
+		return
+	}
 	result, err := collection.DeleteOne(ctx, bson.M{
-		"_id":     expenseID,
+		"_id":     objectId,
 		"user_id": userID,
 	})
 
