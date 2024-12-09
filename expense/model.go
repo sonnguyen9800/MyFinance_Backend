@@ -26,6 +26,7 @@ type UpdateExpenseRequest struct {
 	Name         string  `json:"name"`
 	Description  string  `json:"description"`
 	CategoryID   string  `bson:"category_id,omitempty" json:"category_id,omitempty"`
+	Date         string  `json:"date"`
 }
 
 // PaginatedExpenseResponse represents the paginated response for expenses

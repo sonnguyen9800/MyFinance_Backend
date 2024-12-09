@@ -357,7 +357,7 @@ func (h *Handler) HandleUpdateExpense(c *gin.Context) {
 	}
 
 	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionExpensesName)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Second)
 	defer cancel()
 
 	// Build update document
@@ -373,6 +373,9 @@ func (h *Handler) HandleUpdateExpense(c *gin.Context) {
 	}
 	if req.Description != "" {
 		update["description"] = req.Description
+	}
+	if req.Date != "" {
+		update["date"] = req.Date
 	}
 
 	categoryID := req.CategoryID
@@ -396,10 +399,15 @@ func (h *Handler) HandleUpdateExpense(c *gin.Context) {
 
 	}
 
+	objectId, error := utils.StringToObjectId(expenseID)
+	if error != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid expense ID " + error.Error()})
+		return
+	}
 	result, err := collection.UpdateOne(
 		ctx,
 		bson.M{
-			"_id":     expenseID,
+			"_id":     objectId,
 			"user_id": userID,
 		},
 		bson.M{"$set": update},
@@ -418,7 +426,7 @@ func (h *Handler) HandleUpdateExpense(c *gin.Context) {
 	// Get updated expense
 	var expense Expense
 	err = collection.FindOne(ctx, bson.M{
-		"_id":     expenseID,
+		"_id":     objectId,
 		"user_id": userID,
 	}).Decode(&expense)
 
