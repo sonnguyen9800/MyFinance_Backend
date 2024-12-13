@@ -1,28 +1,12 @@
 package main
 
 import (
-	"log"
 	"my-finance-backend/config"
 	"os"
-
-	"github.com/joho/godotenv"
 )
 
 // LoadConfig loads configuration from environment variables
 func LoadConfig() *config.Config {
-	// Load .env file if APP_ENV is not set
-	if os.Getenv("APP_ENV") == "" {
-		if err := godotenv.Load(); err != nil {
-			log.Println("Warning: .env file not found")
-		}
-	}
-
-	// If APP_ENV is production, load .env.prod
-	if os.Getenv("APP_ENV") == "production" {
-		if err := godotenv.Load(".env.prod"); err != nil {
-			log.Fatal("Error loading .env.prod file")
-		}
-	}
 
 	config := &config.Config{
 		AppEnv:                   getEnv("APP_ENV", "development"),
