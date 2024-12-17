@@ -1,0 +1,25 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+          "name": "Air: Run with Live Reload",
+          "type": "go",
+          "request": "launch",
+          "program": "${workspaceFolder}",
+          "preLaunchTask": "Start Air",
+          "mode": "debug",
+          "args": []
+        },
+        {
+          "name": "Run without Live Reload",
+          "type": "go",
+          "request": "launch",
+          "program": "${workspaceFolder}",
+          "mode": "debug",
+          "args": []
+        }
+    ]
+}
