@@ -100,6 +100,14 @@ func main() {
 		info.DatabaseName = config.DatabaseName
 		c.JSON(http.StatusOK, info)
 	})
+	r.GET("/api/test", func(c *gin.Context) {
+		info := version.GetInfo()
+		// Add runtime information
+		info.GoVersion = runtime.Version()
+		info.ServerEnv = config.AppEnv
+		info.DatabaseName = config.DatabaseName
+		c.JSON(http.StatusOK, info)
+	})
 	r.POST("/api/login", authHandler.HandleLogin)
 	r.POST("/api/signin", authHandler.HandleLogin)
 	r.POST("/api/signup", authHandler.HandleSignup)
