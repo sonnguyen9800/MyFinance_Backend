@@ -7,7 +7,7 @@ import (
 	"my-finance-backend/category"
 	"my-finance-backend/expense"
 	"my-finance-backend/tag"
-	"my-finance-backend/users"
+
 	"my-finance-backend/version"
 	"net/http"
 	"runtime"
@@ -105,8 +105,7 @@ func main() {
 	r.POST("/api/signup", authHandler.HandleSignup)
 
 	// Login by token
-	userAuthen := users.NewHandler(client, []byte(config.JWTSecret))
-	r.POST("/api/user", userAuthen.HandleLoginByToken)
+	r.POST("/api/user", authHandler.HandleLoginByToken)
 
 	// Protected routes
 	auth := r.Group("/api")

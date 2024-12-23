@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"my-finance-backend/config"
-	"my-finance-backend/users"
 	"net/http"
 	"strings"
 	"time"
@@ -31,6 +30,79 @@ func NewHandler(mongoClient *mongo.Client, config *config.Config, jwtSecret []by
 	}
 }
 
+// HandleLoginByToken validates the token and returns user information
+func (h *Handler) HandleLoginByToken(c *gin.Context) {
+	// Get token from Authorization header
+	authHeader := c.GetHeader("Authorization")
+	if authHeader == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header required"})
+		return
+	}
+
+	// Remove "Bearer " prefix
+	tokenString := strings.Replace(authHeader, "Bearer ", "", 1)
+
+	// Parse and validate token
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return h.jwtSecret, nil
+	})
+
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	// Extract claims
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok || !token.Valid {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token claims"})
+		return
+	}
+
+	// Check token expiration
+	exp, ok := claims["exp"].(float64)
+	if !ok || time.Unix(int64(exp), 0).Before(time.Now()) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Token expired"})
+		return
+	}
+
+	// Get user ID from claims
+	userID, ok := claims["user_id"].(string)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user ID in token"})
+		return
+	}
+
+	// Get user from database
+	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionUserName)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var user User
+
+	err = collection.FindOne(ctx, bson.M{"_id": userID}).Decode(&user)
+	if err == mongo.ErrNoDocuments {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	} else if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+		return
+	}
+
+	// Return user information
+	response := UserResponse{
+		ID:    user.ID,
+		Name:  user.Name,
+		Email: user.Email,
+		Role:  user.Role,
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
 // HandleLogin handles the login request
 func (h *Handler) HandleLogin(c *gin.Context) {
 	var loginReq LoginRequest
@@ -45,7 +117,7 @@ func (h *Handler) HandleLogin(c *gin.Context) {
 	defer cancel()
 
 	// Find user by email
-	var user users.User
+	var user User
 	err := collection.FindOne(ctx, bson.M{"email": loginReq.Email}).Decode(&user)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -110,7 +182,7 @@ func (h *Handler) HandleSignup(c *gin.Context) {
 	defer cancel()
 
 	// Check if email already exists
-	var existingUser users.User
+	var existingUser User
 	err := collection.FindOne(ctx, bson.M{"email": signupReq.Email}).Decode(&existingUser)
 	if err == nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "Email already registered"})
@@ -128,7 +200,7 @@ func (h *Handler) HandleSignup(c *gin.Context) {
 	}
 
 	// Create new user
-	newUser := users.User{
+	newUser := User{
 		ID:           primitive.NewObjectID().Hex(),
 		Name:         signupReq.Name,
 		Role:         "user", // Default role for new users

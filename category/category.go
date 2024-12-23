@@ -37,7 +37,7 @@ func NewHandler(mongoClient *mongo.Client, config *config.Config, jwtSecret []by
 
 // initializeDefaultCategory creates a default category for a specific user if it doesn't exist
 func (h *Handler) initializeDefaultCategory(userID string) {
-	collection := h.mongoClient.Database("MyFinance_Dev").Collection("categories")
+	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionCategoriesName)
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Second)
 	defer cancel()
 
@@ -86,7 +86,7 @@ func (h *Handler) HandleCreateCategory(c *gin.Context) {
 		return
 	}
 
-	collection := h.mongoClient.Database("MyFinance_Dev").Collection("categories")
+	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionCategoriesName)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -129,7 +129,7 @@ func (h *Handler) HandleGetCategories(c *gin.Context) {
 		return
 	}
 
-	collection := h.mongoClient.Database("MyFinance_Dev").Collection("categories")
+	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionCategoriesName)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -163,7 +163,7 @@ func (h *Handler) HandleGetCategory(c *gin.Context) {
 
 	categoryID := c.Param("id")
 
-	collection := h.mongoClient.Database("MyFinance_Dev").Collection("categories")
+	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionCategoriesName)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -212,7 +212,7 @@ func (h *Handler) HandleUpdateCategory(c *gin.Context) {
 	}
 	req.Name = strings.TrimSpace(req.Name)
 
-	collection := h.mongoClient.Database("MyFinance_Dev").Collection("categories")
+	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionCategoriesName)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -313,7 +313,7 @@ func (h *Handler) HandleDeleteCategory(c *gin.Context) {
 
 	categoryID := c.Param("id")
 
-	collection := h.mongoClient.Database("MyFinance_Dev").Collection("categories")
+	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionCategoriesName)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
