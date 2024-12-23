@@ -9,12 +9,12 @@ build:
 		-X my-finance-backend/version.GitCommit=$(GIT_COMMIT) \
 		-X my-finance-backend/version.GitBranch=$(GIT_BRANCH) \
 		-X my-finance-backend/version.BuildTime=$(BUILD_TIME)" \
-		-o bin/my-finance-backend.exe
+		-o my-finance-backend
 
 .PHONY: run
 run: build
-	./bin/my-finance-backend.exe
+	./my-finance-backend
 
 .PHONY: clean
 clean:
-	rm -rf bin/
+	rm -rf my-finance-backend
