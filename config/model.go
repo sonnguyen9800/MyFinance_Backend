@@ -9,6 +9,7 @@ type Config struct {
 	CollectionExpensesName   string
 	CollectionCategoriesName string
 	CollectionTagsName       string
+	AllowedOrigins           []string
 }
 
 // IsDevelopment checks if the current environment is development

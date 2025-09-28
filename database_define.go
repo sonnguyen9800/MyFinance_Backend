@@ -12,6 +12,11 @@ import (
 // LoadConfig loads configuration from environment variables
 func LoadConfig() *config.Config {
 
+	allowedOrigins := parseCSV(getEnv("ALLOWED_ORIGINS", "http://localhost:8090"))
+	if len(allowedOrigins) == 0 {
+		allowedOrigins = []string{"http://localhost:8090"}
+	}
+
 	config := &config.Config{
 		AppEnv:                   getEnv("APP_ENV", "development"),
 		DatabaseURL:              getEnv("DATABASE_URL", "mongodb://localhost:27017"),
@@ -21,6 +26,7 @@ func LoadConfig() *config.Config {
 		CollectionExpensesName:   "expenses",
 		CollectionCategoriesName: "categories",
 		CollectionTagsName:       "tags",
+		AllowedOrigins:           allowedOrigins,
 	}
 
 	return config
@@ -63,4 +69,16 @@ func getEnvFromFile(key, defaultValue string) string {
 	}
 
 	return defaultValue
+}
+
+func parseCSV(value string) []string {
+	parts := strings.Split(value, ",")
+	var result []string
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
 }

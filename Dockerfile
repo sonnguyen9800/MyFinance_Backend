@@ -19,6 +19,10 @@ RUN CGO_ENABLED=0 GOOS=linux go build -v -o my-finance-backend -a -installsuffix
 # Start a new stage from scratch
 FROM alpine:latest
 
+# Default CORS allow-origins (can be overridden at build or runtime)
+ARG ALLOWED_ORIGINS="http://localhost:8090"
+ENV ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+
 # Install CA certificates and wget for debugging
 RUN apk --no-cache add ca-certificates wget
 
