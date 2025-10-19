@@ -6,6 +6,7 @@ import (
 	"my-finance-backend/authentication"
 	"my-finance-backend/category"
 	"my-finance-backend/expense"
+	"my-finance-backend/portfolio"
 	"my-finance-backend/tag"
 
 	"my-finance-backend/version"
@@ -90,6 +91,7 @@ func main() {
 
 	categoryHandler := category.NewHandler(client, config, []byte(config.JWTSecret))
 	tagHandler := tag.NewHandler(client, config)
+	portfolioHandler := portfolio.NewHandler(client, config)
 	// Initialize Gin router
 	r := gin.Default()
 
@@ -140,6 +142,41 @@ func main() {
 		r.POST("/api/tags", tagHandler.HandleCreateTag)
 		r.GET("/api/tags", tagHandler.HandleGetTags)
 		r.GET("/api/tags/:id", tagHandler.HandleGetTag)
+
+		// Portfolio asset class routes
+		auth.POST("/asset_classes", portfolioHandler.HandleCreateAssetClass)
+		auth.GET("/asset_classes", portfolioHandler.HandleGetAssetClasses)
+
+		// Portfolio asset routes
+		auth.POST("/assets", portfolioHandler.HandleCreateAsset)
+		auth.GET("/assets", portfolioHandler.HandleGetAssets)
+		auth.GET("/assets/:id", portfolioHandler.HandleGetAsset)
+		auth.PATCH("/assets/:id", portfolioHandler.HandleUpdateAsset)
+		auth.DELETE("/assets/:id", portfolioHandler.HandleDeleteAsset)
+
+		// Position lots routes
+		auth.POST("/assets/:id/lots", portfolioHandler.HandleCreatePositionLot)
+		auth.GET("/assets/:id/lots", portfolioHandler.HandleGetPositionLots)
+		auth.PATCH("/assets/:id/lots/:lotId", portfolioHandler.HandleUpdatePositionLot)
+		auth.DELETE("/assets/:id/lots/:lotId", portfolioHandler.HandleDeletePositionLot)
+
+		// Cash flow routes
+		auth.POST("/assets/:id/cashflows", portfolioHandler.HandleCreateCashFlow)
+		auth.GET("/assets/:id/cashflows", portfolioHandler.HandleGetCashFlows)
+		auth.DELETE("/assets/:id/cashflows/:flowId", portfolioHandler.HandleDeleteCashFlow)
+
+		// Valuation routes
+		auth.POST("/assets/:id/valuations", portfolioHandler.HandleCreateValuationSnapshot)
+		auth.GET("/assets/:id/valuations", portfolioHandler.HandleGetValuationSnapshots)
+		auth.DELETE("/assets/:id/valuations/:valuationId", portfolioHandler.HandleDeleteValuationSnapshot)
+
+		// FX rate management
+		auth.POST("/fx_rates", portfolioHandler.HandleCreateFxRate)
+		auth.GET("/fx_rates", portfolioHandler.HandleGetFxRates)
+		auth.DELETE("/fx_rates/:rateId", portfolioHandler.HandleDeleteFxRate)
+
+		// Portfolio summary
+		auth.GET("/portfolio/summary", portfolioHandler.HandleGetPortfolioSummary)
 
 		// Expense routes
 		auth.POST("/expenses", expenseHandler.HandleCreateExpense)

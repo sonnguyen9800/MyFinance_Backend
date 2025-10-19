@@ -1,15 +1,23 @@
 package config
 
 type Config struct {
-	AppEnv                   string
-	DatabaseURL              string
-	DatabaseName             string
-	JWTSecret                string
-	CollectionUserName       string
-	CollectionExpensesName   string
-	CollectionCategoriesName string
-	CollectionTagsName       string
-	AllowedOrigins           []string
+	AppEnv                     string
+	DatabaseURL                string
+	DatabaseName               string
+	JWTSecret                  string
+	CollectionUserName         string
+	CollectionExpensesName     string
+	CollectionCategoriesName   string
+	CollectionTagsName         string
+	CollectionAssetsName       string
+	CollectionAssetClassesName string
+	CollectionPositionLotsName string
+	CollectionCashFlowsName    string
+	CollectionValuationsName   string
+	CollectionPricePointsName  string
+	CollectionFxRatesName      string
+	DefaultReferenceCurrency   string
+	AllowedOrigins             []string
 }
 
 // IsDevelopment checks if the current environment is development

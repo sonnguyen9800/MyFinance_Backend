@@ -16,17 +16,26 @@ func LoadConfig() *config.Config {
 	if len(allowedOrigins) == 0 {
 		allowedOrigins = []string{"http://localhost:8090"}
 	}
+	log.Print(allowedOrigins)
 
 	config := &config.Config{
-		AppEnv:                   getEnv("APP_ENV", "development"),
-		DatabaseURL:              getEnv("DATABASE_URL", "mongodb://localhost:27017"),
-		DatabaseName:             getEnv("DATABASE_NAME", "MyFinance_Dev"),
-		JWTSecret:                getEnv("JWT_SECRET", "your-dev-secret-key"),
-		CollectionUserName:       "users",
-		CollectionExpensesName:   "expenses",
-		CollectionCategoriesName: "categories",
-		CollectionTagsName:       "tags",
-		AllowedOrigins:           allowedOrigins,
+		AppEnv:                     getEnv("APP_ENV", "development"),
+		DatabaseURL:                getEnv("DATABASE_URL", "mongodb://localhost:27017"),
+		DatabaseName:               getEnv("DATABASE_NAME", "MyFinance_Dev"),
+		JWTSecret:                  getEnv("JWT_SECRET", "your-dev-secret-key"),
+		CollectionUserName:         "users",
+		CollectionExpensesName:     "expenses",
+		CollectionCategoriesName:   "categories",
+		CollectionTagsName:         "tags",
+		CollectionAssetsName:       "assets",
+		CollectionAssetClassesName: "asset_classes",
+		CollectionPositionLotsName: "position_lots",
+		CollectionCashFlowsName:    "cash_flows",
+		CollectionValuationsName:   "valuation_snapshots",
+		CollectionPricePointsName:  "price_points",
+		CollectionFxRatesName:      "fx_rates",
+		DefaultReferenceCurrency:   getEnv("DEFAULT_REFERENCE_CURRENCY", "USD"),
+		AllowedOrigins:             allowedOrigins,
 	}
 
 	return config
