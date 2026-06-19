@@ -25,6 +25,8 @@ type User struct {
 	Role         string `bson:"role"`
 	Email        string `bson:"email"`
 	PasswordHash string `bson:"password_hash"`
+	Provider     string `bson:"provider,omitempty"`
+	ProviderID   string `bson:"provider_id,omitempty"`
 }
 type UserResponse struct {
 	ID    string `json:"id"`

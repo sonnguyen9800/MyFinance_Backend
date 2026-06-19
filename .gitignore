@@ -1,1 +1,29 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*_debug_bin*
+__debug_bin*
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.out
+
+# Air live-reload temp dir
+tmp/
+
+# Local environment overrides
+.env
+.env.local
+
+# Editor/IDE
+.idea/
+.vscode/
+
+# Misc assets (kept out of source historically)
 images/

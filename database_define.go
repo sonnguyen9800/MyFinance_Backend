@@ -23,6 +23,7 @@ func LoadConfig() *config.Config {
 		DatabaseURL:                getEnv("DATABASE_URL", "mongodb://localhost:27017"),
 		DatabaseName:               getEnv("DATABASE_NAME", "MyFinance_Dev"),
 		JWTSecret:                  getEnv("JWT_SECRET", "your-dev-secret-key"),
+		GoogleClientID:             getEnv("GOOGLE_CLIENT_ID", ""),
 		CollectionUserName:         "users",
 		CollectionExpensesName:     "expenses",
 		CollectionCategoriesName:   "categories",

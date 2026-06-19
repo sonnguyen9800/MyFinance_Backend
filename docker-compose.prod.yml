@@ -1,0 +1,25 @@
+services:
+  backend:
+    image: ghcr.io/sonnguyen9800/myfinance/backend:latest
+    container_name: myfinance-backend
+    ports:
+      - "127.0.0.1:8080:8080"   # bound to localhost; Nginx terminates TLS
+    environment:
+      - APP_ENV=production
+      - DATABASE_URL=mongodb://mongo:27017
+      - DATABASE_NAME=${DATABASE_NAME:?set DATABASE_NAME}
+      - JWT_SECRET=${JWT_SECRET:?set a strong JWT_SECRET}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:?set ALLOWED_ORIGINS}
+    depends_on:
+      - mongo
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:7
+    container_name: myfinance-mongo
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+
+volumes:
+  mongo_data:

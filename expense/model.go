@@ -1,35 +1,40 @@
 package expense
 
 type Expense struct {
-	ID           string  `bson:"_id,omitempty"  json:"id,omitempty"`
-	UserID       string  `bson:"user_id" json:"user_id"`
-	CategoryID   string  `bson:"category_id,omitempty" json:"category_id,omitempty"`
-	Amount       float64 `bson:"amount" json:"amount"`
-	CurrencyCode string  `bson:"currency_code" json:"currency_code"`
-	Name         string  `bson:"name" json:"name"`
-	Description  string  `bson:"description" json:"description"`
-	Date         string  `bson:"date" json:"date"`
+	ID            string   `bson:"_id,omitempty"  json:"id,omitempty"`
+	UserID        string   `bson:"user_id" json:"user_id"`
+	CategoryID    string   `bson:"category_id,omitempty" json:"category_id,omitempty"`
+	Amount        float64  `bson:"amount" json:"amount"`
+	CurrencyCode  string   `bson:"currency_code" json:"currency_code"`
+	Name          string   `bson:"name" json:"name"`
+	Description   string   `bson:"description" json:"description"`
+	PaymentMethod string   `bson:"payment_method,omitempty" json:"payment_method,omitempty"`
+	TagIDs        []string `bson:"tag_ids,omitempty" json:"tag_ids,omitempty"`
+	Date          string   `bson:"date" json:"date"`
 }
 
 type CreateExpenseRequest struct {
-	Amount       float64 `json:"amount" binding:"required"`
-	CategoryID   string  `json:"category_id,omitempty"`
-	CurrencyCode string  `json:"currency_code" binding:"required"`
-	Name         string  `json:"name" binding:"required"`
-	Description  string  `json:"description"`
-	Date         string  `json:"date"`
+	Amount        float64  `json:"amount" binding:"required"`
+	CategoryID    string   `json:"category_id,omitempty"`
+	CurrencyCode  string   `json:"currency_code" binding:"required"`
+	Name          string   `json:"name" binding:"required"`
+	Description   string   `json:"description"`
+	PaymentMethod string   `json:"payment_method,omitempty"`
+	TagIDs        []string `json:"tag_ids,omitempty"`
+	Date          string   `json:"date"`
 }
 
 type UpdateExpenseRequest struct {
-	Amount       float64 `json:"amount"`
-	CurrencyCode string  `json:"currency_code"`
-	Name         string  `json:"name"`
-	Description  string  `json:"description"`
-	CategoryID   string  `bson:"category_id,omitempty" json:"category_id,omitempty"`
-	Date         string  `json:"date"`
+	Amount        float64  `json:"amount"`
+	CurrencyCode  string   `json:"currency_code"`
+	Name          string   `json:"name"`
+	Description   string   `json:"description"`
+	CategoryID    string   `bson:"category_id,omitempty" json:"category_id,omitempty"`
+	PaymentMethod string   `json:"payment_method,omitempty"`
+	TagIDs        []string `json:"tag_ids,omitempty"`
+	Date          string   `json:"date"`
 }
 
-// PaginatedExpenseResponse represents the paginated response for expenses
 type PaginatedExpenseResponse struct {
 	Expenses    []Expense `json:"expenses"`
 	TotalCount  int64     `json:"total_count"`
@@ -43,7 +48,6 @@ type GetLastExpensesResponse struct {
 	TotalExpensesLast7Days  float64 `json:"total_expenses_last_7_days"`
 }
 
-// PaginatedExpenseResponse represents the paginated response for expenses
 type GetMontlyExpensesResponse struct {
 	Expenses    []Expense `json:"expenses"`
 	TotalAmount int64     `json:"total_amount"`
@@ -56,7 +60,7 @@ type CSVUploadResponse struct {
 }
 
 type CSVExpense struct {
-	Date  string // MM/dd/YYYY
+	Date  string
 	Name  string
 	Price float64
 	Note  string

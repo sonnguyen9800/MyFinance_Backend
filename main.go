@@ -2,31 +2,32 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
+	"log/slog"
 	"my-finance-backend/authentication"
 	"my-finance-backend/category"
 	"my-finance-backend/expense"
 	"my-finance-backend/portfolio"
 	"my-finance-backend/tag"
-
 	"my-finance-backend/version"
 	"net/http"
+	"os"
+	"os/signal"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-
-	"github.com/gin-contrib/cors"
-
-	"errors"
 )
 
-// Authentication middleware
-func authMiddleware() gin.HandlerFunc {
+// authMiddleware validates the JWT on protected routes.
+func authMiddleware(secret []byte) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
@@ -40,8 +41,7 @@ func authMiddleware() gin.HandlerFunc {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, errors.New("invalid signing method")
 			}
-			config := LoadConfig()
-			return []byte(config.JWTSecret), nil
+			return secret, nil
 		})
 
 		if err != nil {
@@ -64,10 +64,16 @@ func authMiddleware() gin.HandlerFunc {
 }
 
 func main() {
-	// Load configuration
 	config := LoadConfig()
 
-	// Initialize MongoDB connection
+	// Security: fail fast on an unsafe JWT secret in production
+	if config.JWTSecret == "" || config.JWTSecret == "your-dev-secret-key" {
+		if config.AppEnv == "production" || config.AppEnv == "prod" {
+			log.Fatal("FATAL: JWT_SECRET must be set to a strong, unique value in production")
+		}
+		slog.Warn("Using insecure default JWT secret — set JWT_SECRET before deploying to production")
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -76,61 +82,60 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	// Ping the database
-	err = client.Ping(ctx, nil)
-	if err != nil {
+	if err = client.Ping(ctx, nil); err != nil {
 		log.Fatal(err)
 	}
+	slog.Info("Connected to MongoDB", "env", config.AppEnv, "database", config.DatabaseName)
 
-	log.Printf("Connected to MongoDB! Environment: %s, Database: %s\n", config.AppEnv, config.DatabaseName)
+	if err := ensureIndexes(client, config); err != nil {
+		slog.Error("Could not create database indexes", "error", err)
+	}
 
-	// Initialize handlers
 	authHandler := authentication.NewHandler(client, config, []byte(config.JWTSecret))
 	expenseHandler := expense.NewHandler(client, config, []byte(config.JWTSecret))
-
 	categoryHandler := category.NewHandler(client, config, []byte(config.JWTSecret))
 	tagHandler := tag.NewHandler(client, config)
 	portfolioHandler := portfolio.NewHandler(client, config)
-	// Initialize Gin router
-	r := gin.Default()
+
+	r := gin.New()
+	r.Use(gin.Recovery(), requestLogger())
 
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     config.AllowedOrigins,
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
 
-	// Public routes
-	r.GET("/api/ping", func(c *gin.Context) {
-		info := version.GetInfo()
-		// Add runtime information
-		info.GoVersion = runtime.Version()
-		info.ServerEnv = config.AppEnv
-		info.DatabaseName = config.DatabaseName
-		c.JSON(http.StatusOK, info)
-	})
-	r.GET("/api/test", func(c *gin.Context) {
-		info := version.GetInfo()
-		// Add runtime information
-		info.GoVersion = runtime.Version()
-		info.ServerEnv = config.AppEnv
-		info.DatabaseName = config.DatabaseName
-		c.JSON(http.StatusOK, info)
-	})
-	r.POST("/api/login", authHandler.HandleLogin)
-	r.POST("/api/signin", authHandler.HandleLogin)
-	r.POST("/api/signup", authHandler.HandleSignup)
+	loginLimiter := newRateLimiter(5, time.Minute)
 
-	// Login by token
+	healthHandler := func(c *gin.Context) {
+		info := version.GetInfo()
+		info.GoVersion = runtime.Version()
+		info.ServerEnv = config.AppEnv
+		info.DatabaseName = config.DatabaseName
+		c.JSON(http.StatusOK, info)
+	}
+	r.GET("/api/ping", healthHandler)
+	r.GET("/api/test", healthHandler)
+	r.GET("/api/health", healthHandler)
+
+	r.POST("/api/login", loginLimiter, authHandler.HandleLogin)
+	r.POST("/api/signin", loginLimiter, authHandler.HandleLogin)
+	r.POST("/api/signup", loginLimiter, authHandler.HandleSignup)
+	r.POST("/api/auth/google", loginLimiter, authHandler.HandleGoogleAuth)
 	r.POST("/api/user", authHandler.HandleLoginByToken)
 
-	// Protected routes
 	auth := r.Group("/api")
-	auth.Use(authMiddleware())
+	auth.Use(authMiddleware([]byte(config.JWTSecret)))
 	{
+		// Account management
+		auth.POST("/auth/refresh", authHandler.HandleRefreshToken)
+		auth.PUT("/user", authHandler.HandleUpdateUser)
+		auth.PUT("/user/password", authHandler.HandleChangePassword)
+		auth.DELETE("/user", authHandler.HandleDeleteAccount)
+
 		// Category routes
 		auth.POST("/categories", categoryHandler.HandleCreateCategory)
 		auth.GET("/categories", categoryHandler.HandleGetCategories)
@@ -138,10 +143,12 @@ func main() {
 		auth.PUT("/categories/:id", categoryHandler.HandleUpdateCategory)
 		auth.DELETE("/categories/:id", categoryHandler.HandleDeleteCategory)
 
-		// Tag routes
-		r.POST("/api/tags", tagHandler.HandleCreateTag)
-		r.GET("/api/tags", tagHandler.HandleGetTags)
-		r.GET("/api/tags/:id", tagHandler.HandleGetTag)
+		// Tag routes (authenticated + full CRUD)
+		auth.POST("/tags", tagHandler.HandleCreateTag)
+		auth.GET("/tags", tagHandler.HandleGetTags)
+		auth.GET("/tags/:id", tagHandler.HandleGetTag)
+		auth.PUT("/tags/:id", tagHandler.HandleUpdateTag)
+		auth.DELETE("/tags/:id", tagHandler.HandleDeleteTag)
 
 		// Portfolio asset class routes
 		auth.POST("/asset_classes", portfolioHandler.HandleCreateAssetClass)
@@ -185,16 +192,32 @@ func main() {
 		auth.GET("/expenses_montly", expenseHandler.HandleGetExpensesMonthly)
 		auth.POST("/expenses/upload", expenseHandler.HandleUploadCSV)
 		auth.GET("/expenses/download", expenseHandler.HandleDownloadCSV)
-
 		auth.GET("/expenses/:id", expenseHandler.HandleGetExpense)
 		auth.PUT("/expenses/:id", expenseHandler.HandleUpdateExpense)
 		auth.DELETE("/expenses/:id", expenseHandler.HandleDeleteExpense)
-
 	}
 
-	// Start server
-	if err := r.Run(":8080"); err != nil {
-		log.Fatal(err)
-	}
+	srv := &http.Server{Addr: ":8080", Handler: r}
 
+	go func() {
+		slog.Info("Server listening", "addr", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("listen: %s\n", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	slog.Info("Shutting down server…")
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Fatal("Server forced to shutdown:", err)
+	}
+	if err := client.Disconnect(shutdownCtx); err != nil {
+		slog.Error("Error disconnecting MongoDB", "error", err)
+	}
+	slog.Info("Server exited cleanly")
 }

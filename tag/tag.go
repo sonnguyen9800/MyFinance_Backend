@@ -2,103 +2,168 @@ package tag
 
 import (
 	"context"
+	"my-finance-backend/apperr"
 	"my-finance-backend/config"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type Handler struct {
-	mongoClient *mongo.Client
-	config      *config.Config
+	config *config.Config
+	repo   *Repository
 }
 
 func NewHandler(mongoClient *mongo.Client, config *config.Config) *Handler {
 	return &Handler{
-		mongoClient: mongoClient,
-		config:      config,
+		config: config,
+		repo:   NewRepository(mongoClient.Database(config.DatabaseName), config.CollectionTagsName, config.CollectionExpensesName),
 	}
 }
 
-// Create tag
 func (h *Handler) HandleCreateTag(c *gin.Context) {
-	var req CreateTagRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+	userID := c.GetString("user_id")
+	if userID == "" {
+		apperr.Respond(c, apperr.Unauthorized("User ID not found"))
 		return
 	}
+	var req CreateTagRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apperr.Respond(c, apperr.BadRequest("Invalid request body"))
+		return
+	}
+	req.Name = strings.TrimSpace(req.Name)
 
-	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionTagsName)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Check if tag with same name exists
-	existingFilter := bson.M{"name": req.Name}
-	var existingTag Tag
-	err := collection.FindOne(ctx, existingFilter).Decode(&existingTag)
-	if err == nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "Tag with this name already exists"})
-		return
-	}
-
-	tag := Tag{
-		ID:   primitive.NewObjectID().Hex(),
-		Name: req.Name,
-	}
-
-	_, err = collection.InsertOne(ctx, tag)
+	exists, err := h.repo.NameExists(ctx, userID, req.Name, nil)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not create tag"})
+		apperr.Respond(c, apperr.Internal("Database error"))
+		return
+	}
+	if exists {
+		apperr.Respond(c, apperr.Conflict("Tag with this name already exists"))
 		return
 	}
 
+	tag := &Tag{UserID: userID, Name: req.Name}
+	if err := h.repo.Create(ctx, tag); err != nil {
+		apperr.Respond(c, apperr.Internal("Could not create tag"))
+		return
+	}
 	c.JSON(http.StatusCreated, tag)
 }
 
-// Get all tags
 func (h *Handler) HandleGetTags(c *gin.Context) {
-	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionTagsName)
+	userID := c.GetString("user_id")
+	if userID == "" {
+		apperr.Respond(c, apperr.Unauthorized("User ID not found"))
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	cursor, err := collection.Find(ctx, bson.M{})
+	tags, err := h.repo.ListByUser(ctx, userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch tags"})
+		apperr.Respond(c, apperr.Internal("Could not fetch tags"))
 		return
 	}
-	defer cursor.Close(ctx)
-
-	var tags []Tag
-	if err = cursor.All(ctx, &tags); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not decode tags"})
-		return
-	}
-
 	c.JSON(http.StatusOK, tags)
 }
 
-// Get single tag
 func (h *Handler) HandleGetTag(c *gin.Context) {
-	tagID := c.Param("id")
-
-	collection := h.mongoClient.Database(h.config.DatabaseName).Collection(h.config.CollectionTagsName)
+	userID := c.GetString("user_id")
+	if userID == "" {
+		apperr.Respond(c, apperr.Unauthorized("User ID not found"))
+		return
+	}
+	oid, err := primitive.ObjectIDFromHex(c.Param("id"))
+	if err != nil {
+		apperr.Respond(c, apperr.BadRequest("Invalid tag ID"))
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var tag Tag
-	err := collection.FindOne(ctx, bson.M{"_id": tagID}).Decode(&tag)
-
+	tag, err := h.repo.GetByID(ctx, userID, oid)
 	if err == mongo.ErrNoDocuments {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Tag not found"})
+		apperr.Respond(c, apperr.NotFound("Tag not found"))
 		return
-	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch tag"})
+	}
+	if err != nil {
+		apperr.Respond(c, apperr.Internal("Could not fetch tag"))
+		return
+	}
+	c.JSON(http.StatusOK, tag)
+}
+
+func (h *Handler) HandleUpdateTag(c *gin.Context) {
+	userID := c.GetString("user_id")
+	if userID == "" {
+		apperr.Respond(c, apperr.Unauthorized("User ID not found"))
+		return
+	}
+	oid, err := primitive.ObjectIDFromHex(c.Param("id"))
+	if err != nil {
+		apperr.Respond(c, apperr.BadRequest("Invalid tag ID"))
+		return
+	}
+	var req UpdateTagRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apperr.Respond(c, apperr.BadRequest("Invalid request body"))
+		return
+	}
+	req.Name = strings.TrimSpace(req.Name)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	conflict, err := h.repo.NameExists(ctx, userID, req.Name, &oid)
+	if err != nil {
+		apperr.Respond(c, apperr.Internal("Database error"))
+		return
+	}
+	if conflict {
+		apperr.Respond(c, apperr.Conflict("Tag with this name already exists"))
 		return
 	}
 
-	c.JSON(http.StatusOK, tag)
+	if err := h.repo.UpdateName(ctx, userID, oid, req.Name); err == mongo.ErrNoDocuments {
+		apperr.Respond(c, apperr.NotFound("Tag not found"))
+		return
+	} else if err != nil {
+		apperr.Respond(c, apperr.Internal("Could not update tag"))
+		return
+	}
+	c.JSON(http.StatusOK, Tag{ID: oid.Hex(), UserID: userID, Name: req.Name})
+}
+
+func (h *Handler) HandleDeleteTag(c *gin.Context) {
+	userID := c.GetString("user_id")
+	if userID == "" {
+		apperr.Respond(c, apperr.Unauthorized("User ID not found"))
+		return
+	}
+	oid, err := primitive.ObjectIDFromHex(c.Param("id"))
+	if err != nil {
+		apperr.Respond(c, apperr.BadRequest("Invalid tag ID"))
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := h.repo.Delete(ctx, userID, oid); err == mongo.ErrNoDocuments {
+		apperr.Respond(c, apperr.NotFound("Tag not found"))
+		return
+	} else if err != nil {
+		apperr.Respond(c, apperr.Internal("Could not delete tag"))
+		return
+	}
+	h.repo.PullFromExpenses(ctx, userID, oid.Hex())
+	c.JSON(http.StatusOK, gin.H{"message": "Tag deleted successfully"})
 }
